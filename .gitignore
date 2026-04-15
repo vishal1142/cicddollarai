@@ -1,0 +1,9 @@
+# Local secrets (never commit)
+.env
+secrets.env
+
+# Maven / IDE build output if you build inside this clone
+target/
+
+# Nested git metadata if you copy backup trees locally
+**/.git/

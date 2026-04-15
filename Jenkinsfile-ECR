@@ -1,0 +1,192 @@
+@Library('jenkinslibrary@master') _
+
+pipeline {
+    agent any
+
+    parameters {
+        choice(name: 'action', choices: ['create', 'delete'], description: 'Choose create or delete')
+        string(name: 'ImageName', defaultValue: 'vishal', description: 'Name of the Docker image')
+        string(name: 'ImageTag', defaultValue: 'latest', description: 'Tag of the Docker image')
+        string(name: 'DockerHubUser', defaultValue: 'awsdevops12345', description: 'DockerHub username')
+        string(name: 'AWS_ACCOUNT_ID', defaultValue: '131664697495', description: 'AWS Account ID')
+        string(name: 'REGION', defaultValue: 'us-east-2', description: 'AWS Region')
+        string(name: 'ECR_REPO_NAME', defaultValue: 'vishal', description: 'ECR Repository Name')
+    }
+
+    stages {
+        stage('Git Checkout') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    echo 'Checking out source code...'
+                    gitCheckout(
+                        branch: 'main',
+                        url: 'https://github.com/vishal1142/java.git'
+                    )
+                }
+            }
+        }
+
+        stage('Unit Test') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    echo 'Running unit tests...'
+                    mvnTest()
+                }
+            }
+        }
+
+        stage('Integration Test') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    echo 'Running integration tests...'
+                    mvnIntegrationTest()
+                }
+            }
+        }
+
+        stage('Static Code Analysis (SonarQube)') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    echo 'Performing static code analysis with SonarQube...'
+                    staticCodeAnalysis(
+                        credentialsId: 'sonarqube-api',
+                        sonarHostUrl: 'http://192.168.1.188:9000',
+                        sonarProjectKey: 'java-jenkins-demo',
+                        sonarProjectName: 'Java Jenkins Demo',
+                        sonarProjectVersion: '1.0'
+                    )
+                }
+            }
+        }
+
+        stage('Quality Gate Check') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    echo 'Checking SonarQube Quality Gate status...'
+                    QualityGateStatus(credentialsId: 'sonarqube-api')
+                }
+            }
+        }
+
+        stage('Maven Build') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    echo 'Building the project with Maven...'
+                    mvnBuild()
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    def fullImageName = "${params.DockerHubUser}/${params.ImageName}:${params.ImageTag}"
+                    echo "Building Docker image: ${fullImageName}"
+                    dockerBuild(
+                        ImageName: params.ImageName,
+                        ImageTag: params.ImageTag,
+                        DockerHubUser: params.DockerHubUser
+                    )
+                }
+            }
+        }
+
+        stage('Trivy Scan') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    echo 'Scanning the Docker image for vulnerabilities using Trivy...'
+                    dockerImageScan(
+                        ImageName: params.ImageName,
+                        ImageTag: params.ImageTag,
+                        DockerHubUser: params.DockerHubUser
+                    )
+                }
+            }
+        }
+
+        stage('Docker Push to DockerHub') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    echo 'Pushing Docker image to DockerHub...'
+                    DockerImagePush(
+                        params.ImageName,
+                        params.ImageTag,
+                        params.DockerHubUser
+                    )
+                }
+            }
+        }
+
+        stage('Login to AWS ECR') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'ecr-credentials', passwordVariable: 'AWS_SECRET_ACCESS_KEY', usernameVariable: 'AWS_ACCESS_KEY_ID')]) {
+                        sh """
+                            aws ecr get-login-password --region ${params.REGION} | docker login --username AWS --password-stdin ${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Docker Push to AWS ECR') {
+            when {
+                expression { params.action == 'create' }
+            }
+            steps {
+                script {
+                    def ecrImageName = "${params.AWS_ACCOUNT_ID}.dkr.ecr.${params.REGION}.amazonaws.com/${params.ECR_REPO_NAME}:${params.ImageTag}"
+                    echo "Listing local Docker images before tagging:"
+                    sh "docker images"
+                    echo "Tagging Docker image for AWS ECR: ${ecrImageName}"
+                    sh "docker tag ${params.DockerHubUser}/${params.ImageName}:${params.ImageTag} ${ecrImageName}"
+                    echo "Pushing Docker image to AWS ECR: ${ecrImageName}"
+                    sh "docker push ${ecrImageName}"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'This will always run - Pipeline finished.'
+        }
+        success {
+            echo 'Pipeline succeeded successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Please check the errors.'
+        }
+    }
+}
+ 

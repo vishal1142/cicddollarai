@@ -1,0 +1,19 @@
+# Use a fixed version instead of :latest to reduce unpredictable vulnerabilities
+FROM atlassian/jira-software:9.12.0-jdk11
+
+USER root
+
+# Reduce image attack surface by only upgrading what's needed
+RUN apt-get update \
+  && apt-get install --only-upgrade -y \
+     libssl1.1 \
+     openssl \
+     curl \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
+# Expose port 8080 (you can map to 9080 externally)
+EXPOSE 8080
+
+# Switch back to the default non-root user for safety
+USER daemon

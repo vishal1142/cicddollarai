@@ -1,0 +1,70 @@
+# Jenkins Configuration as Code — global library + baseline security.
+# Library name must match: @Library('jenkinslibrary@main') in your Jenkinsfile (cicddollarai default branch is main).
+#
+# Shared library is loaded from GitHub (HTTPS). Credential id must exist in Jenkins
+# (create with scripts/jenkins_bootstrap.py — it creates github-pat for java-ci).
+# file:///var/jenkins_library is blocked by the Git plugin unless you set
+# hudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true (not recommended).
+
+jenkins:
+  # No heavyweight builds on the controller; use Docker cloud agents (label: docker-agent).
+  numExecutors: 0
+  mode: EXCLUSIVE
+
+  systemMessage: >
+    Configured by Configuration as Code. Change the default admin password immediately.
+    Shared library jenkinslibrary: GitHub vishal1142/cicddollarai (branch main), credential github-pat.
+    Pipelines should use agent { label 'docker-agent' } or agent any (with this setup, work runs on Docker agents).
+
+  clouds:
+    - docker:
+        name: "docker"
+        dockerApi:
+          dockerHost:
+            uri: "unix:///var/run/docker.sock"
+        templates:
+          - labelString: "docker-agent"
+            dockerTemplateBase:
+              # Built by: docker compose build jenkins-ci-agent (see Dockerfile.agent)
+              image: "my-ci-agent:latest"
+              # Local-only image: do not try to pull from Docker Hub (fixes "Waiting for next available executor").
+              pullStrategy: PULL_NEVER
+              mounts:
+                - "type=bind,source=/var/run/docker.sock,destination=/var/run/docker.sock"
+            remoteFs: "/home/jenkins/agent"
+            connector:
+              attach:
+                user: "jenkins"
+            instanceCapStr: "5"
+            retentionStrategy:
+              idleMinutes: 5
+
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "changeme"
+
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+unclassified:
+  # Global Pipeline Libraries live under unclassified (see jcasc-plugin demos/jenkins/jenkins.yaml).
+  globalLibraries:
+    libraries:
+      - name: "jenkinslibrary"
+        defaultVersion: "main"
+        implicit: false
+        allowVersionOverride: true
+        includeInChangesets: false
+        retriever:
+          modernSCM:
+            scm:
+              git:
+                remote: "https://github.com/vishal1142/cicddollarai.git"
+                credentialsId: "github-pat"
+
+  location:
+    url: "http://localhost:8080/"

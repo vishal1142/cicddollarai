@@ -1,0 +1,10 @@
+# Jenkins Docker-cloud agent: JDK + Maven + Git (matches typical java-ci pipeline).
+# Build: docker compose -f docker-compose.cicd.yml build jenkins-ci-agent
+FROM jenkins/inbound-agent:jdk17
+
+USER root
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends maven git \
+    && rm -rf /var/lib/apt/lists/*
+
+USER jenkins
