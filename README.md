@@ -1,4 +1,5 @@
 # cicddollarai
+<<<<<<< HEAD
 
 Jenkins **Global Pipeline Library** source (Shared Library layout: `vars/*.groovy`).
 
@@ -12,3 +13,6 @@ In `Jenkinsfile`:
 ```
 
 Pass `credentialsId: 'github-pat'` into `gitCheckout([...])` when the application repo is private.
+=======
+cicddollarai
+>>>>>>> 9b0beda258d0a18cdadd60c5100eb138b6cf91b6
